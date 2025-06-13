@@ -14,7 +14,7 @@ I would highly recommend not using this project as an example on how to code cle
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-#
+# 
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -1265,6 +1265,7 @@ class ColoursClass:
 		self.status_text_normal = rgb_add_hls(self.top_panel_background, 0, 0.30, -0.15)
 
 		self.side_panel_background = self.grey(18)
+		self.lyrics_panel_background = self.grey(18)
 		self.gallery_background = self.side_panel_background
 		self.playlist_panel_background = self.grey(21)
 		self.bottom_panel_colour = self.grey(15)
@@ -1391,6 +1392,7 @@ class ColoursClass:
 		self.vis_bg.r = int(0.05 * 255 + (1 - 0.05) * self.top_panel_background.r)
 		self.vis_bg.g = int(0.05 * 255 + (1 - 0.05) * self.top_panel_background.g)
 		self.vis_bg.b = int(0.05 * 255 + (1 - 0.05) * self.top_panel_background.b)
+		self.vis_bg.a = int(0.05 * 255 + (1 - 0.05) * self.top_panel_background.a)
 
 		self.message_box_bg = self.box_background
 		self.sys_tab_bg = self.tab_background
@@ -19182,10 +19184,12 @@ class LyricsRenMini:
 		self.lyrics_position = 0
 
 	def generate(self, index, w) -> None:
+		logging.info("lyricsrenmini generate")
 		self.text = self.pctl.master_library[index].lyrics
 		self.lyrics_position = 0
 
 	def render(self, index, x, y, w, h, p) -> None:
+		logging.info("lyricsrenmini render")
 		if index != self.index or self.text != self.pctl.master_library[index].lyrics:
 			self.index = index
 			self.generate(index, w)
@@ -19198,7 +19202,7 @@ class LyricsRenMini:
 		#	 if inp.mouse_wheel > 0:
 		#		 prefs.lyrics_font_size -= 1
 
-		self.ddt.text((x, y, 4, w), self.text, colour, self.prefs.lyrics_font_size, w - (w % 2), self.colours.side_panel_background)
+		self.ddt.text((x, y, 4, w), self.text, colour, self.prefs.lyrics_font_size, w - (w % 2), self.colours.lyrics_panel_background)
 
 class LyricsRen:
 
@@ -19211,17 +19215,31 @@ class LyricsRen:
 		self.lyrics_position = 0
 
 	def test_update(self, track_object: TrackClass) -> None:
-		if track_object.index != self.index or self.text != track_object.lyrics:
+		logging.info(f"lyricsren test_update: track object index is {track_object.index} and self index is {self.index}")
+		if track_object.index != self.index: # or self.text != track_object.lyrics:
 			self.index = track_object.index
-			self.text = track_object.lyrics
+			# old line: self.text = track_object.lyrics
+			# get rid of LRC formatting if you can:
+			logging.info(f"lyrics currently are: \n{track_object.lyrics}")
+			for line in track_object.lyrics:
+				if len(line) < 10:
+					self.text += line
+	
+				if line[0] != "[" or line[9] != "]" or ":" not in line or "." not in line:
+					self.text += line
+				else:
+					self.text += line[10:]
+			# TODO (Flynn): fix the conditional for this section to run
+			logging.info(f"self.text after running update is:\n{self.text}")
 			self.lyrics_position = 0
 
 	def render(self, x, y, w, h, p) -> None:
+		logging.info("lyricsren render")
 		colour = self.colours.lyrics
-		if test_lumi(self.colours.gallery_background) < 0.5:
+		if test_lumi(self.colours.lyrics_panel_background) < 0.5:
 			colour = self.colours.grey(40)
-
-		self.ddt.text((x, y, 4, w), self.text, colour, 17, w, self.colours.playlist_panel_background)
+		# TODO (Flynn): this used to check the gallery backrgound & i don't even know why it did that much
+		self.ddt.text((x, y, 4, w), self.text, colour, 17, w, self.colours.lyrics_panel_background)
 
 class TimedLyricsToStatic:
 
@@ -19230,13 +19248,15 @@ class TimedLyricsToStatic:
 		self.cache_lyrics = ""
 
 	def get(self, track: TrackClass) -> str:
+		logging.info("timedlyricstostatic get is running")
 		if track.lyrics:
-			return track.lyrics
-		if track.is_network:
+			data = track.lyrics
+		elif track.is_network:
 			return ""
-		if track == self.cache_key:
+		elif track == self.cache_key:
 			return self.cache_lyrics
-		data = find_synced_lyric_data(track)
+		else:
+			data = find_synced_lyric_data(track)
 
 		if data is None:
 			self.cache_lyrics = ""
@@ -19279,6 +19299,7 @@ class TimedLyricsRen:
 		self.scroll_position: int = 0
 
 	def generate(self, track: TrackClass) -> bool | None:
+		logging.info("timedlyricsren generate")
 		if self.index == track.index:
 			return self.ready
 
@@ -19331,6 +19352,7 @@ class TimedLyricsRen:
 		return True
 
 	def render(self, index: int, x: int, y: int, side_panel: bool = False, w: int = 0, h: int = 0) -> bool | None:
+		logging.info("timedlyricsren render")
 		if index != self.index:
 			self.ready = False
 			self.generate(self.pctl.master_library[index])
@@ -19354,8 +19376,7 @@ class TimedLyricsRen:
 		highlight = True
 
 		if side_panel:
-			bg = self.colours.side_panel_background
-			bg = ColourRGBA(bg.r, bg.g, bg.b, 255)
+			bg = self.colours.lyrics_panel_background
 			font_size = 15
 			spacing = round(17 * self.gui.scale)
 			self.ddt.rect((self.window_size[0] - self.gui.rspw, y, self.gui.rspw, h), bg)
@@ -19365,7 +19386,6 @@ class TimedLyricsRen:
 			font_size = 17
 			spacing = round(23 * self.gui.scale)
 
-		bg = ColourRGBA(bg.r, bg.g, bg.b, 255)
 		test_time = self.tauon.get_real_time()
 
 		if self.pctl.track_queue[self.pctl.queue_step] == index:
@@ -21039,6 +21059,7 @@ class AlbumArt:
 				#logging.info(x_colours)
 				colours.playlist_panel_bg = colours.side_panel_background
 				colours.playlist_box_background = colours.side_panel_background
+				colours.lyrics_panel_background = colours.side_panel_background
 
 				colours.playlist_panel_background = x_colours[0]
 				if len(x_colours) > 1:
@@ -34032,7 +34053,7 @@ class MetaBox:
 
 	def lyrics(self, x: int, y: int, w: int, h: int, track: TrackClass) -> None:
 		bg = self.colours.side_panel_background
-		bg = ColourRGBA(bg.r, bg.g, bg.b, 255)
+		#bg = ColourRGBA(bg.r, bg.g, bg.b, 255)
 		self.ddt.rect((x, y, w, h), bg)
 		self.ddt.text_background_colour = bg
 
@@ -34093,7 +34114,7 @@ class MetaBox:
 	def draw(self, x: int, y: int, w: int, h: int, track=None) -> None:
 
 		bg = self.colours.side_panel_background
-		bg = ColourRGBA(bg.r, bg.g, bg.b, 255)
+		#bg = ColourRGBA(bg.r, bg.g, bg.b, 255)
 		self.ddt.text_background_colour = bg
 		self.ddt.clear_rect((x, y, w, h))
 		self.ddt.rect((x, y, w, h), bg)
@@ -46129,11 +46150,12 @@ def main(holder: Holder) -> None:
 					for i, value in enumerate(gui.spec2_buffers[0]):
 						ddt.rect(
 							[gui.spec2_position, i, 1, 1],
-							ColourRGBA(
+							'''ColourRGBA(
 								min(255, prefs.spec2_base[0] + int(value * prefs.spec2_multiply[0])),
 								min(255, prefs.spec2_base[1] + int(value * prefs.spec2_multiply[1])),
 								min(255, prefs.spec2_base[2] + int(value * prefs.spec2_multiply[2])),
-								255))
+								colours.top_panel_background.a))'''
+							colours.vis_bg )
 
 					del gui.spec2_buffers[0]
 
@@ -46289,7 +46311,7 @@ def main(holder: Holder) -> None:
 				y = 0
 
 				gui.spec_level_rec.x = round(x - 70 * gui.scale)
-				ddt.rect_a((0, 0), (79 * gui.scale, 18 * gui.scale), colours.grey(10))
+				ddt.rect_a((0, 0), (79 * gui.scale, 18 * gui.scale), colours.vis_bg ) #colours.grey(10))
 
 				x = round(gui.level_ww - 9 * gui.scale)
 				y = 10 * gui.scale
